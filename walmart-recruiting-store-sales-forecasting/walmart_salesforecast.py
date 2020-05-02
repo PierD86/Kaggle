@@ -7,7 +7,7 @@ import scipy.stats as st
 import datetime
 
 #import all input csv
-!dir
+#!dir
 path_features = os.path.join(os.getcwd(),'features.csv')
 path_stores = os.path.join(os.getcwd(),'stores.csv')
 path_train = os.path.join(os.getcwd(),'train.csv')
@@ -20,16 +20,43 @@ df_tr = pd.read_csv(path_train)
 df_ts = pd.read_csv(path_test)
 df_ss = pd.read_csv(path_samplesub)
 
-#merge all information in a single dataframe
+#merge all information in a single dataframe (train)
 df = pd.merge(df_tr, df_st, how = 'left', on = 'Store')
-df = pd.merge(df, df_ft, how = 'left', on=['Date', 'Store'])
+df = pd.merge(df, df_ft, how = 'left', on=['Date', 'Store','IsHoliday'])
+
+#merge all information in a single dataframe (test)
+df_ts = pd.merge(df_ts, df_st, how = 'left', on = 'Store')
+df_ts = pd.merge(df_ts, df_ft, how = 'left', on=['Date', 'Store','IsHoliday'])
+
 
 #checking NaN values
 df.isnull().sum()
-#df.fillna(0,inplace=True)
-df.dropna(inplace=True)
+df.fillna(0,inplace=True)
+df_ts.fillna(0,inplace=True)
 
-df['Date'] = pd.to_datetime(df['Date']) 
+#manipulate dates
+df['Date'] = pd.to_datetime(df['Date'])
+df['DayOfYear'] = df['Date'].dt.dayofyear
+df_ts['Date'] = pd.to_datetime(df_ts['Date'])
+df_ts['DayOfYear'] = df_ts['Date'].dt.dayofyear
+
+#get_dummies
+df = pd.get_dummies(df, columns = ['Type'])
+df_ts = pd.get_dummies(df_ts, columns = ['Type'])
+
+#define variables type
+cont_var = ['Size',
+            'Temperature',
+            'Fuel_Price',
+            'MarkDown1',
+            'MarkDown2',
+            'MarkDown3',
+            'MarkDown4',
+            'MarkDown5',
+            'CPI',
+            'Unemployment',
+            'DayOfYear']
+
 
 #EDA
 ############### CONTINUOS VARS #########################
@@ -46,26 +73,20 @@ sns.distplot(df['MarkDown4'], ax = ax[2,1], fit=st.norm)
 sns.distplot(df['MarkDown5'], ax = ax[2,2], fit=st.norm)
 sns.distplot(df['CPI'], ax = ax[3,0], fit=st.norm)
 sns.distplot(df['Unemployment'], ax = ax[3,1], fit=st.norm)
+sns.distplot(df['DayOfYear'], ax = ax[3,2], fit=st.norm)
 
 
 #unskewing data:
 #let's check if normalization helps to unskew data
 from sklearn.preprocessing import MinMaxScaler
-mms = MinMaxScaler()
+mmsx = MinMaxScaler()
+mmsy = MinMaxScaler()
 df_s = df.copy()
-cont_var = ['Weekly_Sales',
-            'Size',
-            'Temperature',
-            'Fuel_Price',
-            'MarkDown1',
-            'MarkDown2',
-            'MarkDown3',
-            'MarkDown4',
-            'MarkDown5',
-            'CPI',
-            'Unemployment']
+df_ts_s = df_ts.copy()
 
-df_s[cont_var] = mms.fit_transform(df[cont_var])
+df_s[cont_var] = mmsx.fit_transform(df[cont_var])
+df_s[['Weekly_Sales']] = mmsx.fit_transform(df[['Weekly_Sales']])
+df_ts_s[cont_var] = mmsx.transform(df_ts[cont_var])
 
 def sigmoid(x):
   return 1 / (1 + np.exp(-x))
@@ -109,6 +130,7 @@ def unskewner(dfx, dz_func, func_name, vars):
     sns.distplot(dz_func[func_name][0](dfx['MarkDown5']), ax = ax[2,2], fit=st.norm, color = dz_func[func_name][1])
     sns.distplot(dz_func[func_name][0](dfx['CPI']), ax = ax[3,0], fit=st.norm, color = dz_func[func_name][1])
     sns.distplot(dz_func[func_name][0](dfx['Unemployment']), ax = ax[3,1], fit=st.norm, color = dz_func[func_name][1])
+    sns.distplot(dz_func[func_name][0](dfx['DayOfYear']), ax = ax[3,2], fit=st.norm, color = dz_func[func_name][1])
     plt.suptitle(f'{func_name}')
     plt.savefig(f'dist_{func_name}.jpg')
     dz_mu, dz_sgm, dz_skw, dz_krt = {}, {}, {}, {}
@@ -136,18 +158,49 @@ for k in dz:
 
 
 #from all plots and analysing skewness and kurtosis of all transformations
-#seems very usefull to use the 'yeojohnson' methodology
+#seems very usefull to use the 'yeojohnson' methodology for the 'norm_var'
 #heatmaps shows that aweak  linear correlation with Weekly_Sales is present 
 #only for 'Size' and 'MarkDown5'
 
+norm_var = ['Temperature',
+            'Fuel_Price',
+            'MarkDown1',
+            'MarkDown2',
+            'MarkDown3',
+            'MarkDown4',
+            'MarkDown5',
+            'Unemployment']
 df_yeo = df_s.copy()
+df_ts_yeo = df_ts.copy()
 yeo_lambda = {}
-for var in cont_var:
+yeo_lambda_ts = {}
+for var in norm_var:
   df_yeo[var],yeo_lambda[var]  = st.yeojohnson(df_s[var])
+  df_ts_yeo[var],yeo_lambda_ts[var]  = st.yeojohnson(df_ts_s[var])
 
-############### CATEGORIVAL VARS #########################
-plt.figure(figsize=(10,10))
-sns.pairplot(df, vars=cont_var)
-plt.savefig(f'pairplot.jpg')
+#df_yeo['Weekly_Sales'],yeo_lambda['Weekly_Sales']  = st.yeojohnson(df_s['Weekly_Sales'])
 
-df.head()
+
+#create a model - XGBoost
+from xgboost import XGBRegressor
+X_tr = df.drop(columns=['Date','Weekly_Sales'])
+Y_tr = df[['Weekly_Sales']]
+model = XGBRegressor()
+model.fit(X_tr,Y_tr)
+
+X_ts = df_ts.drop(columns=['Date'])
+Yhat_ts = model.predict(X_ts)
+
+df_ts['Weekly_Sales'] = Yhat_ts
+
+
+#create the Id column as the SampleSubmission
+df_ts['Date'] = df_ts['Date'].dt.strftime('%Y-%m-%d')
+df_ts['Id'] = df_ts.apply(lambda x: str(x['Store']) + '_' +
+                                      str(x['Dept']) + '_' +
+                                      str(x['Date']), axis=1)
+
+#create submission file
+df_sb = df_ts[['Id','Weekly_Sales']]
+path_sb = os.path.join(os.getcwd(),'submission.csv')
+df_sb.to_csv(path_sb, sep=',', index = False)
