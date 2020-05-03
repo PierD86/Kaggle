@@ -174,28 +174,24 @@ df_tr_yeo[cont_var] = ptx.fit_transform(df_tr[cont_var])
 df_tr_yeo[['Weekly_Sales']] = pty.fit_transform(df_tr[['Weekly_Sales']])
 df_ts_yeo[cont_var] = ptx.transform(df_ts[cont_var])
 
-#create a model - XGBoost
+#create a model - XGBoost and RandomSearch
 from xgboost import XGBRegressor
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import train_test_split
 
 X = df_tr_yeo.drop(columns=['Date','Weekly_Sales'])
 Y = df_tr_yeo[['Weekly_Sales']]
-
 X_tr, X_cv, Y_tr, Y_cv = train_test_split(X, Y, test_size = 0.2, random_state = None, shuffle = True)
 model = XGBRegressor()
-
-eval_set = [(X_tr, Y_tr), (X_cv, Y_cv)]
-#model.fit(X_tr, Y_tr, eval_metric=["error", "rmse"], eval_set=eval_set, verbose=True)
-
-params = {"max_depth":[2,6],"learning_rate":[0.01,0.3,1],"n_estimator":[10,100,500], "reg_lambda":[0.01,0.1,1]}
+params = {"max_depth":[2,6,20],"learning_rate":[0.01,0.3,1],"n_estimator":[3,10,100], "reg_lambda":[0.005,0.01,0.1]}
 rs = RandomizedSearchCV(model, params, cv = 10)
 rs.fit(X_tr,Y_tr)
 best_params = rs.best_params_
 
+#best_params = {'reg_lambda': 0.1, 'n_estimator': 3, 'max_depth': 20, 'learning_rate': 1}
 
-##########################
-
+#########################################
+#### - to be investigated how to apply to random search - ####
 # # retrieve performance metrics
 # results = rs.evals_result()
 # epochs = len(results['validation_0']['error'])
@@ -212,17 +208,17 @@ best_params = rs.best_params_
 # print(f' final rmse diff: {err}')
 
 ##########################
-X_ts = df_ts_yeo.drop(columns=['Date'])
 
-model_rs = XGBRegressor(reg_lambda = 0.01, n_estimator = 10, max_depth = 6, learning_rate = 0.3)
+#retrain the model with the best params on the full dataset
+X_ts = df_ts_yeo.drop(columns=['Date'])
+model_rs = XGBRegressor(reg_lambda = best_params['reg_lambda'], n_estimator = best_params['n_estimator'], max_depth = best_params['max_depth'], learning_rate = best_params['learning_rate'])
 model_rs.fit(X,Y)
+#make final prediction
 Yhat_ts = model_rs.predict(X_ts)
 Yhat_ts = pty.inverse_transform(Yhat_ts.reshape(-1,1))
 
-df_ts['Weekly_Sales'] = Yhat_ts
-
-
 #create the Id column as the SampleSubmission
+df_ts['Weekly_Sales'] = Yhat_ts
 df_ts['Date'] = df_ts['Date'].dt.strftime('%Y-%m-%d')
 df_ts['Id'] = df_ts.apply(lambda x: str(x['Store']) + '_' +
                                       str(x['Dept']) + '_' +
