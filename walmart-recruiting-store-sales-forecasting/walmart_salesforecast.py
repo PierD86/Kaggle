@@ -75,10 +75,10 @@ sns.distplot(df_tr['MarkDown5'], ax = ax[2,2], fit=st.norm)
 sns.distplot(df_tr['CPI'], ax = ax[3,0], fit=st.norm)
 sns.distplot(df_tr['Unemployment'], ax = ax[3,1], fit=st.norm)
 sns.distplot(df_tr['DayOfYear'], ax = ax[3,2], fit=st.norm)
-
+plt.savefig(f'dist_original_not_norm.jpg')
 
 #unskewing data:
-#let's check if normalization helps to unskew data
+#let's check if normalization and transformations help to unskew data
 from sklearn.preprocessing import MinMaxScaler
 mmsx = MinMaxScaler()
 mmsy = MinMaxScaler()
@@ -145,7 +145,7 @@ def unskewner(df, dz_func, func_name, vars):
 #create distplot for each transformation in dz
 rslt_mu, rslt_sgm, rslt_skw, rslt_krt = {}, {}, {}, {}
 for k in dz:
-    rslt_mu[k],rslt_sgm[k],rslt_skw[k],rslt_krt[k] = unskewner(df_s,dz,k,cont_var)
+    rslt_mu[k],rslt_sgm[k],rslt_skw[k],rslt_krt[k] = unskewner(df_tr_s,dz,k,cont_var)
 
 def heatmapper(df, dz_func, func_name, vars):
     plt.figure(figsize=(10,10)) 
@@ -176,13 +176,47 @@ df_ts_yeo[cont_var] = ptx.transform(df_ts[cont_var])
 
 #create a model - XGBoost
 from xgboost import XGBRegressor
-X_tr = df_tr_yeo.drop(columns=['Date','Weekly_Sales'])
-Y_tr = df_tr_yeo[['Weekly_Sales']]
-model = XGBRegressor()
-model.fit(X_tr,Y_tr)
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import train_test_split
 
+X = df_tr_yeo.drop(columns=['Date','Weekly_Sales'])
+Y = df_tr_yeo[['Weekly_Sales']]
+
+X_tr, X_cv, Y_tr, Y_cv = train_test_split(X, Y, test_size = 0.2, random_state = None, shuffle = True)
+model = XGBRegressor()
+
+eval_set = [(X_tr, Y_tr), (X_cv, Y_cv)]
+#model.fit(X_tr, Y_tr, eval_metric=["error", "rmse"], eval_set=eval_set, verbose=True)
+
+params = {"max_depth":[2,6],"learning_rate":[0.01,0.3,1],"n_estimator":[10,100,500], "reg_lambda":[0.01,0.1,1]}
+rs = RandomizedSearchCV(model, params, cv = 10)
+rs.fit(X_tr,Y_tr)
+best_params = rs.best_params_
+
+
+##########################
+
+# # retrieve performance metrics
+# results = rs.evals_result()
+# epochs = len(results['validation_0']['error'])
+# x_axis = range(0, epochs)
+# # plot rmse
+# fig, ax = plt.subplots()
+# ax.plot(x_axis, results['validation_0']['rmse'], label='Train')
+# ax.plot(x_axis, results['validation_1']['rmse'], label='Valid')
+# ax.legend()
+# plt.ylabel('RMSE')
+# plt.title('XGBoost RMSE')
+# plt.show()
+# err = results['validation_0']['rmse'][-1] - results['validation_1']['rmse'][-1]
+# print(f' final rmse diff: {err}')
+
+##########################
 X_ts = df_ts_yeo.drop(columns=['Date'])
-Yhat_ts = model.predict(X_ts)
+
+model_rs = XGBRegressor(reg_lambda = 0.01, n_estimator = 10, max_depth = 6, learning_rate = 0.3)
+model_rs.fit(X,Y)
+Yhat_ts = model_rs.predict(X_ts)
 Yhat_ts = pty.inverse_transform(Yhat_ts.reshape(-1,1))
 
 df_ts['Weekly_Sales'] = Yhat_ts
