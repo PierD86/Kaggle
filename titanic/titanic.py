@@ -106,7 +106,12 @@ sns.distplot(df_tr['Age']) #it looks a normal distribution
 #deal with Cabin
 df_tr['Cabin'].unique()
 df_tr.info() #now we have NaN only on Cabin column
-df_tr_cabin = df_tr.dropna() #let's check if Cabin column, where present, influence other variable
+df_tr['Cabin_Letter'] = df_tr_cabin['Cabin'].apply(lambda x: x[0])
+df_tr = df_tr.fillna('Z') #let's check if Cabin column, where present, influence other variable
+df_tr['Cabin_Letter'].unique()
+df_tr.info()
+df_tr = df_tr.drop(columns='Cabin', axis =1) #we can use Cabin Letter instead of Cabin
+
 
 
 
