@@ -10,6 +10,8 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score, cross_val_predict
 import sklearn.metrics
+from sklearn.preprocessing import MinMaxScaler
+from xgboost import XGBClassifier
 
 #titanic input files' path
 !dir
@@ -36,10 +38,10 @@ df_ts.set_index('PassengerId', inplace = True)
 
 #divide variables according to their type
 df_tr.columns
-cat_var = ['Pclass','Sex','Embarked'] #categorical variables
-dsc_var = ['Age','SibSp','Parch'] #discrete variables
+cat_var = ['Sex','Embarked'] #categorical variables
+dsc_var = ['SibSp','Parch','Pclass'] #discrete variables
 str_var = ['Name','Ticket','Cabin'] #string variables
-cnt_var = ['Fare'] #continuos variable
+cnt_var = ['Fare','Age'] #continuos variable
 trg_var = ['Survived'] #target variable
 
 ############ Let's deal with NaN ######################
@@ -106,14 +108,30 @@ sns.distplot(df_tr['Age']) #it looks a normal distribution
 #deal with Cabin
 df_tr['Cabin'].unique()
 df_tr.info() #now we have NaN only on Cabin column
-df_tr['Cabin_Letter'] = df_tr_cabin['Cabin'].apply(lambda x: x[0])
+df_tr['Cabin_Letter'] = df_tr['Cabin'].apply(lambda x: str(x)[0])
 df_tr = df_tr.fillna('Z') #let's check if Cabin column, where present, influence other variable
 df_tr['Cabin_Letter'].unique()
 df_tr.info()
-df_tr = df_tr.drop(columns='Cabin', axis =1) #we can use Cabin Letter instead of Cabin
+sns.barplot(x ='Cabin_Letter', y='Survived', data = df_tr) #from the plot it seems that there is no difference among the type of cabin, the only letter strongly different is 'Z'. Can be interesting to create the variable 'Cabin available'
+df_tr['Cabin_Available'] = np.NaN
+df_tr['Cabin_Available'][df_tr['Cabin'] == 'Z'] = 0
+df_tr['Cabin_Available'][df_tr['Cabin'] != 'Z'] = 1
+sns.barplot(x ='Cabin_Available', y='Survived', data = df_tr)
+df_tr = df_tr.drop(columns= ['Cabin','Cabin_Letter'], axis =1) #we can use Cabin Available instead of Cabin and Cabin Letter
+#repeat this substitution also on testset
+df_ts['Cabin_Letter'] = df_ts['Cabin'].apply(lambda x: str(x)[0])
+df_ts = df_ts.fillna('Z')
+df_ts['Cabin_Available'] = np.NaN
+df_ts['Cabin_Available'][df_ts['Cabin'] == 'Z'] = 0
+df_ts['Cabin_Available'][df_ts['Cabin'] != 'Z'] = 1
+df_ts = df_ts.drop(columns= ['Cabin','Cabin_Letter'], axis =1)
 
 
-
+#for further investigation:
+    #decide how to trate:
+        #ticket
+        #name
+        #Pclass
 
 ############## NEW VARIABLES #########################
 #maybe create a new variable will be useful
@@ -121,12 +139,51 @@ df_tr = df_tr.drop(columns='Cabin', axis =1) #we can use Cabin Letter instead of
 df_tr['Relatives'] = df_tr['Parch'] + df_tr['SibSp']
 df_ts['Relatives'] = df_ts['Parch'] + df_ts['SibSp']
 #isalone
+df_tr['Alone'] = df_tr['Relatives'].apply(lambda x: 1 if x == 0 else 0)
+df_ts['Alone'] = df_ts['Relatives'].apply(lambda x: 1 if x == 0 else 0)
 
 
-dsc_var = ['Age','SibSp','Parch','Relatives','IsAlone'] #update discrete variables
+cat_var = ['Sex','Embarked'] #categorical variables
+bin_var = ['Alone','Cabin_Available']
+dsc_var = ['Pclass','SibSp','Parch','Relatives'] #update discrete variables
+str_var = ['Name','Ticket'] #string variables
+cnt_var = ['Fare','Age'] #continuos variable
+trg_var = ['Survived'] #target variable
 
 
+#we will not use ticket and name at the moment
+df_tr = df_tr.drop(columns= str_var, axis = 1)
+df_ts = df_ts.drop(columns= str_var, axis = 1)
 
+# lets get dummies from categorical variables
+df_tr = pd.get_dummies(df_tr, columns = cat_var)
+df_ts = pd.get_dummies(df_ts, columns = cat_var)
+
+# normalization of discrete and continue variables (later we will evaluate if use onehotencoding for discrete variables)
+mmsx = MinMaxScaler()
+
+df_tr[dsc_var+cnt_var] = mmsx.fit_transform(df_tr[dsc_var+cnt_var])
+df_ts[dsc_var+cnt_var] = mmsx.transform(df_ts[dsc_var+cnt_var])
+
+df_tr.columns
+df_ts.columns
+
+#fit model
+Xtr = df_tr.drop(columns='Survived')
+Ytr = df_tr['Survived']
+Xts = df_ts.copy()
+
+xgb = XGBClassifier()
+xgb.fit(Xtr, Ytr)
+
+#predict survived
+Yhat_ts = xgb.predict(Xts)
+
+#create submission file
+path_sb = os.path.join(os.getcwd(),'submission.csv')
+df_sb = df_gs.copy()
+df_sb['Survived'] = Yhat_ts
+df_sb.to_csv(path_sb, index = False)
 
 
 
