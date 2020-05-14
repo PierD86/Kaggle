@@ -1,3 +1,4 @@
+#score achieved --> 0.79425
 import numpy as np
 import pandas as pd
 import datetime
@@ -103,28 +104,57 @@ df_tr['Age'][df_tr['Age'].isnull()]=Yhat_nan_tr
 df_ts['Age'][df_ts['Age'].isnull()]=Yhat_nan_ts
 #let's plot Age distribution
 sns.distplot(df_tr['Age']) #it looks a normal distribution
-
+#let's create some age band and lets use it instead of Age
+df_tr['AgeBand'] = pd.cut(df_tr['Age'],bins=[0,2,17,65,99],labels=['Baby','Child','Adult','Elderly'])
+df_ts['AgeBand'] = pd.cut(df_ts['Age'],bins=[0,2,17,65,99],labels=['Baby','Child','Adult','Elderly'])
+sns.barplot(x ='AgeBand', y='Survived', data = df_tr)
+df_tr = df_tr.drop(columns= 'Age', axis =1)
+df_ts = df_ts.drop(columns= 'Age', axis =1)
 
 #deal with Cabin
 df_tr['Cabin'].unique()
 df_tr.info() #now we have NaN only on Cabin column
 df_tr['Cabin_Letter'] = df_tr['Cabin'].apply(lambda x: str(x)[0])
-df_tr = df_tr.fillna('Z') #let's check if Cabin column, where present, influence other variable
+#let's check if Cabin column, where present, influence other variable
 df_tr['Cabin_Letter'].unique()
 df_tr.info()
-sns.barplot(x ='Cabin_Letter', y='Survived', data = df_tr) #from the plot it seems that there is no difference among the type of cabin, the only letter strongly different is 'Z'. Can be interesting to create the variable 'Cabin available'
+sns.barplot(x ='Cabin_Letter', y='Survived', data = df_tr) #from the plot it seems that #there is no difference among the type of cabin, the only letter strongly different is 'n'. #Can be interesting to create the variable 'Cabin available'
 df_tr['Cabin_Available'] = np.NaN
-df_tr['Cabin_Available'][df_tr['Cabin'] == 'Z'] = 0
-df_tr['Cabin_Available'][df_tr['Cabin'] != 'Z'] = 1
+df_tr['Cabin_Available'][df_tr['Cabin'] == 'n'] = 0
+df_tr['Cabin_Available'][df_tr['Cabin'] != 'n'] = 1
 sns.barplot(x ='Cabin_Available', y='Survived', data = df_tr)
-df_tr = df_tr.drop(columns= ['Cabin','Cabin_Letter'], axis =1) #we can use Cabin Available instead of Cabin and Cabin Letter
+df_tr = df_tr.drop(columns= ['Cabin','Cabin_Letter'], axis =1) #we can use Cabin Available #instead of Cabin and Cabin Letter
 #repeat this substitution also on testset
 df_ts['Cabin_Letter'] = df_ts['Cabin'].apply(lambda x: str(x)[0])
-df_ts = df_ts.fillna('Z')
 df_ts['Cabin_Available'] = np.NaN
-df_ts['Cabin_Available'][df_ts['Cabin'] == 'Z'] = 0
-df_ts['Cabin_Available'][df_ts['Cabin'] != 'Z'] = 1
+df_ts['Cabin_Available'][df_ts['Cabin'] == 'n'] = 0
+df_ts['Cabin_Available'][df_ts['Cabin'] != 'n'] = 1
 df_ts = df_ts.drop(columns= ['Cabin','Cabin_Letter'], axis =1)
+
+#visualize Embarked vs Survived
+sns.barplot(x ='Embarked', y='Survived', data = df_tr)
+#visualize Pclass vs Survived
+sns.barplot(x ='Pclass', y='Survived', data = df_tr)
+
+#deal with Fare
+#let's plot Fare distribution
+sns.distplot(df_tr['Fare']) #it looks a skewed distribution
+sns.distplot(df_ts['Fare']) #it looks a skewed distribution
+#sqrt transformation
+df_tr['Fare_sqrt'] = np.sqrt(df_tr['Fare'])
+df_ts['Fare_sqrt'] = np.sqrt(df_ts['Fare'])
+sns.distplot(df_tr['Fare_sqrt']) #it looks a skewed distribution
+sns.distplot(df_ts['Fare_sqrt']) #it looks a skewed distribution
+
+df_tr = df_tr.drop(columns= 'Fare', axis =1)
+df_ts = df_ts.drop(columns= 'Fare', axis =1)
+
+#let's create some fare band and lets use it instead of fare
+df_tr['FareBand'] = pd.qcut(df_tr['Fare_sqrt'],4,labels=['Low_fare','MediumLow_Fare','MediumHigh_Fare','High_Fare'])
+df_ts['FareBand'] = pd.qcut(df_ts['Fare_sqrt'],4,labels=['Low_fare','MediumLow_Fare','MediumHigh_Fare','High_Fare'])
+sns.barplot(x ='FareBand', y='Survived', data = df_tr)
+df_tr = df_tr.drop(columns= 'Fare_sqrt', axis =1)
+df_ts = df_ts.drop(columns= 'Fare_sqrt', axis =1)
 
 
 #for further investigation:
@@ -136,18 +166,18 @@ df_ts = df_ts.drop(columns= ['Cabin','Cabin_Letter'], axis =1)
 ############## NEW VARIABLES #########################
 #maybe create a new variable will be useful
 #relatives
-df_tr['Relatives'] = df_tr['Parch'] + df_tr['SibSp']
-df_ts['Relatives'] = df_ts['Parch'] + df_ts['SibSp']
+df_tr['Relatives'] = df_tr['Parch'] * df_tr['SibSp']
+df_ts['Relatives'] = df_ts['Parch'] * df_ts['SibSp']
 #isalone
 df_tr['Alone'] = df_tr['Relatives'].apply(lambda x: 1 if x == 0 else 0)
 df_ts['Alone'] = df_ts['Relatives'].apply(lambda x: 1 if x == 0 else 0)
 
 
-cat_var = ['Sex','Embarked'] #categorical variables
+cat_var = ['Sex','Embarked','AgeBand','FareBand'] #categorical variables
 bin_var = ['Alone','Cabin_Available']
 dsc_var = ['Pclass','SibSp','Parch','Relatives'] #update discrete variables
 str_var = ['Name','Ticket'] #string variables
-cnt_var = ['Fare','Age'] #continuos variable
+cnt_var = [] #continuos variable
 trg_var = ['Survived'] #target variable
 
 
