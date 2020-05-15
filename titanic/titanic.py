@@ -125,18 +125,32 @@ df_tr['Cabin_Available'] = np.NaN
 df_tr['Cabin_Available'][df_tr['Cabin'] == 'n'] = 0
 df_tr['Cabin_Available'][df_tr['Cabin'] != 'n'] = 1
 sns.barplot(x ='Cabin_Available', y='Survived', data = df_tr)
-df_tr = df_tr.drop(columns= ['Cabin','Cabin_Letter'], axis =1) #we can use Cabin Available #instead of Cabin and Cabin Letter
 #repeat this substitution also on testset
 df_ts['Cabin_Letter'] = df_ts['Cabin'].apply(lambda x: str(x)[0])
 df_ts['Cabin_Available'] = np.NaN
 df_ts['Cabin_Available'][df_ts['Cabin'] == 'n'] = 0
 df_ts['Cabin_Available'][df_ts['Cabin'] != 'n'] = 1
+#visualize Cabin vs Survived
+sns.countplot(x ='Cabin_Letter', hue='Survived', data = df_tr, palette="Set1")
+sns.countplot(x ='Cabin_Available', hue='Survived', data = df_tr, palette="Set1")
+#looks like who has a cabin available is more likely to survive
+df_tr = df_tr.drop(columns= ['Cabin','Cabin_Letter'], axis =1) #we can use Cabin Available #instead of Cabin and Cabin Letter
 df_ts = df_ts.drop(columns= ['Cabin','Cabin_Letter'], axis =1)
+
+
 
 #visualize Embarked vs Survived
 sns.barplot(x ='Embarked', y='Survived', data = df_tr)
+sns.countplot(x ='Embarked', hue='Survived', data = df_tr, palette="Set1")
 #visualize Pclass vs Survived
 sns.barplot(x ='Pclass', y='Survived', data = df_tr)
+sns.countplot(x ='Pclass', hue='Survived', data = df_tr, palette="Set1")
+
+#it looks like that who has embarked in 'S' and is in Pclass = 3 is very likely to die, we can create a variable that join both the information
+df_tr['Cls_x_Emb'] = df_tr['Pclass']*df_tr['Embarked'].replace({'S':3,'C':2,'Q':1})
+df_ts['Cls_x_Emb'] = df_ts['Pclass']*df_ts['Embarked'].replace({'S':3,'C':2,'Q':1})
+sns.countplot(x ='Cls_x_Emb', hue='Survived', data = df_tr, palette="Set1")
+
 
 #deal with Fare
 #let's plot Fare distribution
@@ -165,6 +179,10 @@ df_ts = df_ts.drop(columns= 'Fare_sqrt', axis =1)
         #name
         #Pclass
 
+#let's deal with Name
+df_tr['Name']
+
+
 ############## NEW VARIABLES #########################
 #maybe create a new variable will be useful
 #relatives
@@ -176,8 +194,8 @@ df_ts['Alone'] = df_ts['Relatives'].apply(lambda x: 1 if x == 0 else 0)
 
 
 cat_var = ['Sex','Embarked','AgeBand','FareBand'] #categorical variables
-bin_var = ['Alone','Cabin_Available']
-dsc_var = ['Pclass','SibSp','Parch','Relatives'] #update discrete variables
+bin_var = ['Alone']#,'Cabin_Available']
+dsc_var = ['Pclass','SibSp','Parch','Relatives','Cls_x_Emb'] #update discrete variables
 str_var = ['Name','Ticket'] #string variables
 cnt_var = [] #continuos variable
 trg_var = ['Survived'] #target variable
@@ -208,83 +226,80 @@ Xts = df_ts.copy()
 # xgb = XGBClassifier()
 # xgb.fit(Xtr, Ytr)
 
-#####################################
-#bayesian optimization
-from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
-space = {
-    'n_estimators': hp.quniform('n_estimators', 1, 500, 1),
-    'max_depth':  hp.quniform('max_depth', 1, 10, 1),
-    'reg_lambda': hp.loguniform("reg_lambda", np.log(0.01), np.log(10)),
-    'learning_rate': hp.loguniform("learning_rate", np.log(0.01), np.log(1))
-}
-#define the score metric
-from sklearn.model_selection import cross_val_score
-def score(params): #TODO: plot scores
-    params = {
-        'n_estimators': int(params['n_estimators']),
-        'max_depth': int(params['max_depth']),
-        'reg_lambda': float(params['reg_lambda']),
-        'learning_rate': float(params['learning_rate'])
-        }
-    xgb = XGBClassifier()
-    # Perform n_folds cross validation
-    cv_score = cross_val_score(xgb, Xtr, Ytr,
-                                 cv=5,
-                                 scoring='accuracy' 
-                                 ).mean()
-    return cv_score
+################### Hyperopt ######################################
+# #bayesian optimization
+# from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+# space = {
+#     'n_estimators': hp.quniform('n_estimators', 1, 500, 1),
+#     'max_depth':  hp.quniform('max_depth', 1, 10, 1),
+#     'reg_lambda': hp.loguniform("reg_lambda", np.log(0.01), np.log(10)),
+#     'learning_rate': hp.loguniform("learning_rate", np.log(0.01), np.log(1))
+# }
+# #define the score metric
+# from sklearn.model_selection import cross_val_score
+# def score(params): #TODO: plot scores
+#     params = {
+#         'n_estimators': int(params['n_estimators']),
+#         'max_depth': int(params['max_depth']),
+#         'reg_lambda': float(params['reg_lambda']),
+#         'learning_rate': float(params['learning_rate'])
+#         }
+#     xgb = XGBClassifier()
+#     # Perform n_folds cross validation
+#     cv_score = cross_val_score(xgb, Xtr, Ytr,
+#                                  cv=5,
+#                                  scoring='accuracy' 
+#                                  ).mean()
+#     return cv_score
 
-# Use the fmin function from Hyperopt to find the best hyperparameters
-hypopt_trials = Trials()
-best = fmin(score, space, algo=tpe.suggest, 
-            trials=hypopt_trials, 
-            max_evals=100) #TODO: introduce early stopping!
-print(best)
+# # Use the fmin function from Hyperopt to find the best hyperparameters
+# hypopt_trials = Trials()
+# best = fmin(score, space, algo=tpe.suggest, 
+#             trials=hypopt_trials, 
+#             max_evals=100) #TODO: introduce early stopping!
+# print(best)
 
+# #create the best model --> parameters must be changed manually
+# xgb_best = XGBClassifier(n_estimators = int(best['n_estimators']),
+#                              max_depth = int(best['max_depth']), 
+#                              reg_lambda = best['reg_lambda'], 
+#                              learning_rate = best['learning_rate'])
+# xgb_best.fit(Xtr, Ytr)
 
+#######################################################################
 
-#create the best model --> parameters must be changed manually
-xgb_best = XGBClassifier(n_estimators = int(best['n_estimators']),
-                             max_depth = int(best['max_depth']), 
-                             reg_lambda = best['reg_lambda'], 
-                             learning_rate = best['learning_rate'])
-xgb_best.fit(Xtr, Ytr)
+########### manually tune hyperparameter ############
+xgb = XGBClassifier()
 
+X, Xval, Y, Yval = train_test_split(Xtr, Ytr, test_size=0.2, shuffle = True)
+eval_set = [(X, Y), (Xval, Yval)]
+xgb.fit(X, Y, eval_metric=['error'], eval_set=eval_set, verbose=False)
 
+# retrieve performance metrics
+results = xgb.evals_result()
+epochs = len(results['validation_0']['error'])
+x_axis = range(0, epochs)
 
-############ manually tune hyperparameter ############
-# xgb = XGBClassifier(max_depth = 6, n_estimators = 50)
+# plot log loss
+fig, ax = plt.subplots()
+ax.plot(x_axis, results['validation_0']['error'], label='Train')
+ax.plot(x_axis, results['validation_1']['error'], label='Valid')
+ax.legend()
 
-# X, Xval, Y, Yval = train_test_split(Xtr, Ytr, test_size=0.2, shuffle = True)
-# eval_set = [(X, Y), (Xval, Yval)]
-# xgb.fit(X, Y, eval_metric=['error'], eval_set=eval_set, verbose=False)
-
-# # retrieve performance metrics
-# results = xgb.evals_result()
-# epochs = len(results['validation_0']['error'])
-# x_axis = range(0, epochs)
-
-# # plot log loss
-# fig, ax = plt.subplots()
-# ax.plot(x_axis, results['validation_0']['error'], label='Train')
-# ax.plot(x_axis, results['validation_1']['error'], label='Valid')
-# ax.legend()
-
-# plt.ylabel('Accuracy')
-# plt.xlabel('Epochs')
-# plt.title('XGBoost Log Loss')
-# plt.show()
+plt.ylabel('Accuracy')
+plt.xlabel('Epochs')
+plt.title('XGBoost Log Loss')
+plt.show()
 
 
-# xgb.fit(Xtr, Ytr, eval_metric=['error'], eval_set=eval_set, verbose=False)
-# #######################################################
+xgb.fit(Xtr, Ytr, eval_metric=['error'], eval_set=eval_set, verbose=False)
+#######################################################
 
+#predict survived (manual tuning)
+Yhat_ts = xgb.predict(Xts)
 
-# #predict survived
-# Yhat_ts = xgb.predict(Xts)
-
-#predict survived
-Yhat_ts = xgb_best.predict(Xts)
+# #predict survived (hyperopt)
+# Yhat_ts = xgb_best.predict(Xts)
 
 #create submission file
 path_sb = os.path.join(os.getcwd(),'submission.csv')
