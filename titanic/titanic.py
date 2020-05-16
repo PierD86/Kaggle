@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score, cross_val_predict
 import sklearn.metrics
 from sklearn.preprocessing import MinMaxScaler
-from xgboost import XGBClassifier
+import xgboost as xgb
 from sklearn.model_selection import train_test_split
 
 #titanic input files' path
@@ -269,34 +269,42 @@ Xts = df_ts.copy()
 #######################################################################
 
 ########### manually tune hyperparameter ############
-xgb = XGBClassifier()
-
-X, Xval, Y, Yval = train_test_split(Xtr, Ytr, test_size=0.2, shuffle = True)
-eval_set = [(X, Y), (Xval, Yval)]
-xgb.fit(X, Y, eval_metric=['error'], eval_set=eval_set, verbose=False)
-
-# retrieve performance metrics
-results = xgb.evals_result()
-epochs = len(results['validation_0']['error'])
-x_axis = range(0, epochs)
-
-# plot log loss
-fig, ax = plt.subplots()
-ax.plot(x_axis, results['validation_0']['error'], label='Train')
-ax.plot(x_axis, results['validation_1']['error'], label='Valid')
-ax.legend()
-
-plt.ylabel('Accuracy')
-plt.xlabel('Epochs')
-plt.title('XGBoost Log Loss')
-plt.show()
+Train_DM = xgb.DMatrix(data=Xtr.values, label=Ytr)
+Test_DM = xgb.DMatrix(data=Xts.values)
+params = {'objective':'binary:logistic','max_depth' : 4}
+cv_rslt = xgb.cv(dtrain = Train_DM, params = params, nfold = 4, num_boost_round = 10, metrics = 'error', as_pandas = True)
+accuracy = 1 - cv_rslt['test-error-mean'].iloc[-1]
+model = xgb.train(dtrain=Train_DM, params = params)
+Yhat_ts = model.predict(Test_DM)
 
 
-xgb.fit(Xtr, Ytr, eval_metric=['error'], eval_set=eval_set, verbose=False)
+
+# X, Xval, Y, Yval = train_test_split(Xtr, Ytr, test_size=0.2, shuffle = True)
+# eval_set = [(X, Y), (Xval, Yval)]
+# xgb.fit(X, Y, eval_metric=['error'], eval_set=eval_set, verbose=False)
+
+# # retrieve performance metrics
+# results = xgb.evals_result()
+# epochs = len(results['validation_0']['error'])
+# x_axis = range(0, epochs)
+
+# # plot log loss
+# fig, ax = plt.subplots()
+# ax.plot(x_axis, results['validation_0']['error'], label='Train')
+# ax.plot(x_axis, results['validation_1']['error'], label='Valid')
+# ax.legend()
+
+# plt.ylabel('Accuracy')
+# plt.xlabel('Epochs')
+# plt.title('XGBoost Log Loss')
+# plt.show()
+
+
+# xgb.fit(Xtr, Ytr, eval_metric=['error'], eval_set=eval_set, verbose=False)
 #######################################################
 
 #predict survived (manual tuning)
-Yhat_ts = xgb.predict(Xts)
+# Yhat_ts = xgb.predict(Xts)
 
 # #predict survived (hyperopt)
 # Yhat_ts = xgb_best.predict(Xts)
@@ -305,6 +313,8 @@ Yhat_ts = xgb.predict(Xts)
 path_sb = os.path.join(os.getcwd(),'submission.csv')
 df_sb = df_gs.copy()
 df_sb['Survived'] = Yhat_ts
+threshold = 0.5 #the best threshold seems to be 0.5
+df_sb['Survived'] = df_sb['Survived'].apply(lambda x: 1 if x > threshold else 0)
 df_sb.to_csv(path_sb, index = False)
 
 
