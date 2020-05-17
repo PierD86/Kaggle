@@ -1,4 +1,4 @@
-#score achieved --> 0.79425 (without hyperopt)
+#score achieved --> 0.78468 (with hyperopt)
 import numpy as np
 import pandas as pd
 import datetime
@@ -224,50 +224,57 @@ Xtr = df_tr.drop(columns='Survived')
 Ytr = df_tr['Survived']
 Xts = df_ts.copy()
 
-model = xgb.XGBClassifier()
-model.fit(Xtr, Ytr)
+# model = xgb.XGBClassifier()
+# model.fit(Xtr, Ytr)
 
-# ########### manually tune hyperparameter - learning API ############
-# Train_DM = xgb.DMatrix(data=Xtr.values, label=Ytr, feature_names=Xtr.columns)
-# Test_DM = xgb.DMatrix(data=Xts.values, feature_names=Xts.columns)
-# params = {'objective':'binary:logistic','max_depth' : 4}
-# cv_rslt = xgb.cv(dtrain = Train_DM, params = params, nfold = 4, num_boost_round = 10, metrics = 'error', as_pandas = True)
-# accuracy = 1 - cv_rslt['test-error-mean'].iloc[-1]
-# model = xgb.train(dtrain=Train_DM, params = params)
-# Yhat_ts = model.predict(Test_DM)
-# #xgb.plot_tree(model,num_trees=0)
-# xgb.plot_importance(model)
-# #####################################################################
+################## Hyperopt ######################################
+#bayesian optimization
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+space = {
+    'n_estimators': hp.quniform('n_estimators', 1, 100, 1),
+    'colsample_bytree': hp.quniform('colsample_bytree', 0, 1, 0.1),
+    'subsample': hp.quniform('subsample', 0, 1, 0.1),
+    'max_depth':  hp.quniform('max_depth', 1, 10, 1),
+    'reg_lambda': hp.loguniform("reg_lambda", np.log(0.01), np.log(10)),
+    'learning_rate': hp.loguniform("learning_rate", np.log(0.01), np.log(1))
+}
+#define the score metric
+from sklearn.model_selection import cross_val_score
+def score(params): #TODO: plot scores
+    params = {
+        'n_estimators': int(params['n_estimators']),
+        'colsample_bytree': float(params['colsample_bytree']),
+        'subsample': float(params['subsample']),
+        'max_depth': int(params['max_depth']),
+        'reg_lambda': float(params['reg_lambda']),
+        'learning_rate': float(params['learning_rate'])
+        }
+    model = xgb.XGBClassifier()
+    # Perform n_folds cross validation
+    cv_score = cross_val_score(model, Xtr, Ytr,
+                                  cv=5,
+                                  scoring='accuracy' 
+                                  ).mean()
+    return cv_score
 
-########## manually tune hyperparameter - Sklearn API ############
-X, Xval, Y, Yval = train_test_split(Xtr, Ytr, test_size=0.2, shuffle = True)
-eval_set = [(X, Y), (Xval, Yval)]
-model.fit(X, Y, eval_metric=['error'], eval_set=eval_set, verbose=False)
+# Use the fmin function from Hyperopt to find the best hyperparameters
+hypopt_trials = Trials()
+best = fmin(score, space, algo=tpe.suggest, 
+            trials=hypopt_trials, 
+            max_evals=100) #TODO: introduce early stopping!
+print(best)
 
-# retrieve performance metrics
-results = model.evals_result()
-epochs = len(results['validation_0']['error'])
-x_axis = range(0, epochs)
+#create the best model --> parameters must be changed manually
+model_best = xgb.XGBClassifier(n_estimators = int(best['n_estimators']),
+                              max_depth = int(best['max_depth']),
+                              colsample_bytree = float(best['colsample_bytree']),
+                              subsample = float(best['subsample']),
+                              reg_lambda = best['reg_lambda'], 
+                              learning_rate = best['learning_rate'])
+model_best.fit(Xtr, Ytr)
 
-# plot log loss
-fig, ax = plt.subplots()
-ax.plot(x_axis, results['validation_0']['error'], label='Train')
-ax.plot(x_axis, results['validation_1']['error'], label='Valid')
-ax.legend()
-
-plt.ylabel('Accuracy')
-plt.xlabel('Epochs')
-plt.title('XGBoost Accuracy')
-plt.show()
-
-#fit the model
-model.fit(Xtr, Ytr, eval_metric=['error'], eval_set=eval_set, verbose=False)
-
-#predict survived (manual tuning)
-Yhat_ts = model.predict(Xts)
-####################################################################
-
-
+#predict survived (hyperopt)
+Yhat_ts = model_best.predict(Xts)
 
 #create submission file
 path_sb = os.path.join(os.getcwd(),'submission.csv')
@@ -277,6 +284,7 @@ threshold = 0.5 #the best threshold seems to be 0.5
 df_sb['Survived'] = df_sb['Survived'].apply(lambda x: 1 if x > threshold else 0)
 df_sb.to_csv(path_sb, index = False)
 
+#best score --> 0.785
 # XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
 #               colsample_bynode=1, colsample_bytree=0.30000000000000004, gamma=0,
 #               learning_rate=0.13960269512120327, max_delta_step=0, max_depth=6,
@@ -284,3 +292,5 @@ df_sb.to_csv(path_sb, index = False)
 #               nthread=None, objective='binary:logistic', random_state=0,
 #               reg_alpha=0, reg_lambda=0.10100125461929543, scale_pos_weight=1,
 #               seed=None, silent=None, subsample=0.2, verbosity=1)
+
+
