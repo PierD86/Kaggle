@@ -38,6 +38,38 @@ sns.pairplot(df_tr)
 df_tr.set_index('PassengerId', inplace = True)
 df_ts.set_index('PassengerId', inplace = True)
 
+df_tr.info()
+# Int64Index: 891 entries, 1 to 891
+# Data columns (total 11 columns):
+# Survived    891 non-null int64
+# Pclass      891 non-null int64
+# Name        891 non-null object
+# Sex         891 non-null object
+# Age         714 non-null float64
+# SibSp       891 non-null int64
+# Parch       891 non-null int64
+# Ticket      891 non-null object
+# Fare        891 non-null float64
+# Cabin       204 non-null object
+# Embarked    889 non-null object
+# dtypes: float64(2), int64(4), object(5)
+# memory usage: 83.5+ KB
+df_ts.info()
+# Int64Index: 418 entries, 892 to 1309
+# Data columns (total 10 columns):
+# Pclass      418 non-null int64
+# Name        418 non-null object
+# Sex         418 non-null object
+# Age         332 non-null float64
+# SibSp       418 non-null int64
+# Parch       418 non-null int64
+# Ticket      418 non-null object
+# Fare        417 non-null float64
+# Cabin       91 non-null object
+# Embarked    418 non-null object
+# dtypes: float64(2), int64(3), object(5)
+# memory usage: 35.9+ KB
+
 
 #divide variables according to their type
 df_tr.columns
@@ -50,30 +82,6 @@ trg_var = ['Survived'] #target variable
 
 ############ Let's deal with NaN ######################
 #missing values (train set)
-df_tr['Pclass'].isnull().sum() #no missing values
-df_tr['Sex'].isnull().sum() #no missing values
-df_tr['Embarked'].isnull().sum() #2oo891 missing values
-df_tr['Age'].isnull().sum() #177oo891 missing values
-df_tr['SibSp'].isnull().sum() #no missing values
-df_tr['Parch'].isnull().sum() #no missing values
-df_tr['Name'].isnull().sum() #no missing values
-df_tr['Ticket'].isnull().sum() #no missing values
-df_tr['Cabin'].isnull().sum() #687oo891 missing values
-df_tr['Fare'].isnull().sum() #no missing values
-df_tr['Survived'].isnull().sum() #no missing values
-#missing values (test set)
-df_ts['Pclass'].isnull().sum() #no missing values
-df_ts['Sex'].isnull().sum() #no missing values
-df_ts['Embarked'].isnull().sum() #no missing values
-df_ts['Age'].isnull().sum() #86oo418 missing values
-df_ts['SibSp'].isnull().sum() #no missing values
-df_ts['Parch'].isnull().sum() #no missing values
-df_ts['Name'].isnull().sum() #no missing values
-df_ts['Ticket'].isnull().sum() #no missing values
-df_ts['Cabin'].isnull().sum() #327oo418 missing values
-df_ts['Fare'].isnull().sum() #1 missing values
-
-
 #where missing values are a low percentage, we can replace NaN with most frequent value
 df_tr['Embarked'].fillna(df_tr['Embarked'].mode()[0], inplace = True)
 df_ts['Fare'].fillna(df_ts['Fare'].mode()[0], inplace = True)
